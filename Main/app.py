@@ -547,7 +547,7 @@ else:
 <div class="hero-container">
 <div class="hero-text">
 <div class="hero-eyebrow">Sales Intelligence Platform · India</div>
-<div class="title-red">INDIAN</div>
+<div class="title-red">GLOBAL</div>
 <div class="title-black">TRACTOR MARKET</div>
 <div class="title-sub">Competitive Intelligence · FY Data</div>
 </div>
