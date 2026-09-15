@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from apify_client._models import WebhookRepresentation
+from crawlee._utils.urls import validate_http_url
+
+from apify._utils import docs_group
+
+if TYPE_CHECKING:
+    from apify_client._literals import WebhookEventType
+
+
+@docs_group('Actor')
+@dataclass
+class Webhook:
+    """An Apify webhook definition used by the Actor SDK.
+
+    The same instance can be passed as an ad-hoc webhook to `Actor.start()` / `Actor.call()`, or to
+    `Actor.add_webhook()`, which registers it as an ad-hoc webhook for the current run (the
+    `condition.actor_run_id` is set automatically).
+    """
+
+    event_types: list[WebhookEventType]
+    """Events that trigger the webhook."""
+
+    request_url: str
+    """URL the webhook sends its payload to."""
+
+    payload_template: str | None = None
+    """Template for the JSON payload sent by the webhook."""
+
+    headers_template: str | None = None
+    """Template for the HTTP headers sent by the webhook."""
+
+    idempotency_key: str | None = None
+    """Key that prevents creating duplicate webhooks."""
+
+    ignore_ssl_errors: bool | None = None
+    """Whether to ignore SSL errors when sending the request."""
+
+    do_not_retry: bool | None = None
+    """Whether to skip retrying the request on failure."""
+
+    def __post_init__(self) -> None:
+        # Fail fast on a malformed URL at construction time instead of deferring the error to the API call.
+        validate_http_url(self.request_url)
+
+
+def to_client_representations(webhooks: list[Webhook] | None) -> list[WebhookRepresentation] | None:
+    """Convert SDK webhooks to the ad-hoc representation accepted by the client's `start()` / `call()`.
+
+    `Webhook`'s field names match `WebhookRepresentation`'s, so we let pydantic read them straight off the
+    instance rather than listing each one. This forwards any field the representation declares without changes
+    here, and never emits an undeclared field as a malformed snake_case extra.
+    """
+    if not webhooks:
+        return None
+
+    return [WebhookRepresentation.model_validate(webhook, from_attributes=True) for webhook in webhooks]

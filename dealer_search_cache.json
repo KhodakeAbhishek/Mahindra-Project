@@ -1,0 +1,144 @@
+{
+  "ec05019663002a0fff94012a21685224168028ba6e2c72a6971e2ad13b18a77d": {
+    "timestamp": 1789112382.340256,
+    "metadata": {
+      "brand": "Mahindra",
+      "country": "Sri Lanka",
+      "state": "",
+      "city": ""
+    },
+    "dealers": [
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "DIMO Agribusinesses",
+        "Country": "Sri Lanka",
+        "State / Province": "",
+        "City": "Colombo",
+        "Address": "65, Jetawana Road, Colombo 14",
+        "Phone": "011 244 97 11 / 011 244 97 97",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "Mahindra Tractor Distributor",
+        "Country": "Sri Lanka",
+        "State / Province": "",
+        "City": "Batticaloa",
+        "Address": "No 532 Trinco Road",
+        "Phone": "0773418637",
+        "Email": ""
+      }
+    ]
+  },
+  "f1c172bbcd9447bca0b8b232bcbc245af0ec7c3979548aa293bbd7ad6a492703": {
+    "timestamp": 1789113047.7307317,
+    "metadata": {
+      "brand": "Mahindra",
+      "country": "Brazil",
+      "state": "All",
+      "city": ""
+    },
+    "dealers": []
+  },
+  "bace86cc60d766215fe652eaf974e773879379b9eddc4ee8db72ac6ace64abbc": {
+    "timestamp": 1789113285.0511978,
+    "metadata": {
+      "brand": "Mahindra",
+      "country": "Brazil",
+      "state": "",
+      "city": ""
+    },
+    "dealers": [
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "Vittacar Mahindra",
+        "Country": "Brazil",
+        "State / Province": "Espírito Santo",
+        "City": "Guaçuí",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "CDI – Casa dos Implementos",
+        "Country": "Brazil",
+        "State / Province": "Bahia",
+        "City": "Irecê",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "CDI – Casa dos Implementos",
+        "Country": "Brazil",
+        "State / Province": "Bahia",
+        "City": "Feira de Santana",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "Grupo Nosso Campo",
+        "Country": "Brazil",
+        "State / Province": "Paraná",
+        "City": "Arapoti",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "Proagro",
+        "Country": "Brazil",
+        "State / Province": "Minas Gerais",
+        "City": "Montes Claros",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "Scarpa",
+        "Country": "Brazil",
+        "State / Province": "Santa Catarina",
+        "City": "Turvo",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "Scarpa",
+        "Country": "Brazil",
+        "State / Province": "Rio Grande do Sul",
+        "City": "Três Cachoeiras",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "Mahindra Agronômica",
+        "Country": "Brazil",
+        "State / Province": "Rio Grande do Sul",
+        "City": "Frederico Westphalen",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      },
+      {
+        "Company Name": "Mahindra",
+        "Dealer Name": "Mahindra Agronômica",
+        "Country": "Brazil",
+        "State / Province": "Paraná",
+        "City": "Marmeleiro",
+        "Address": "",
+        "Phone": "",
+        "Email": ""
+      }
+    ]
+  }
+}
