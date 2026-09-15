@@ -1831,7 +1831,7 @@ def render_dealers_tab():
     )
 
     st.caption(
-        "Tavily Web Search → Gemini 3.6 Flash Extraction"
+        "Search → Extraction"
     )
 
 
