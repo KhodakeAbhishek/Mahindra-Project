@@ -3,7 +3,9 @@ import os
 import time
 import datetime
 import base64
+import threading
 from concurrent.futures import ThreadPoolExecutor
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 # ── Module imports ──
 import sys
@@ -33,6 +35,14 @@ def get_base64_image(image_path, fallback_url):
         except Exception:
             return fallback_url
     return fallback_url
+
+def _run_with_ctx(ctx, fn, *args, **kwargs):
+    """Runs fn(*args, **kwargs) inside a worker thread while attaching
+    Streamlit's ScriptRunContext, so calls like st.cache_data / st.secrets
+    inside fn keep working the same as they would on the main thread."""
+    if ctx is not None:
+        add_script_run_ctx(threading.current_thread(), ctx)
+    return fn(*args, **kwargs)
 
 st.set_page_config(
     page_title="Mahindra Tractor Intelligence",
@@ -480,11 +490,14 @@ if fetch_btn or 'data_loaded' in st.session_state:
     )
 
     with st.spinner("Fetching intelligence..."):
-        # ── Parallel fetch: Sales, Deals, News run concurrently ──
+        # ── Parallel fetch: Sales, Deals, News run concurrently, each
+        # thread carries Streamlit's ScriptRunContext so st.cache_data /
+        # st.secrets calls inside the fetch functions keep working ──
+        ctx = get_script_run_ctx()
         with ThreadPoolExecutor(max_workers=3) as executor:
-            future_sales = executor.submit(fetch_all_sales, period)
-            future_deals = executor.submit(get_b2b_deals, company, period)
-            future_news  = executor.submit(get_market_news, company, period)
+            future_sales = executor.submit(_run_with_ctx, ctx, fetch_all_sales, period)
+            future_deals = executor.submit(_run_with_ctx, ctx, get_b2b_deals, company, period)
+            future_news  = executor.submit(_run_with_ctx, ctx, get_market_news, company, period)
 
             market_data  = future_sales.result()
             target_deals = future_deals.result()
