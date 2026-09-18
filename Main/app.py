@@ -14,7 +14,7 @@ from Sales.sales import fetch_all_sales, render_sales_tab
 # from modelwise.modelwise import render_modelwise_tab
 from News.news import get_market_news, render_news_tab
 from News.deals import get_b2b_deals, render_deals_tab
-from News.socialmedia import fetch_social_media_news, render_social_tab
+# from News.socialmedia import fetch_social_media_news, render_social_tab
 from Dealers.dealer import render_dealers_tab
 from Ai.aibot import render_aibot_tab
 from tender.tender import render_tenders_tab, init_tender_system
