@@ -525,8 +525,8 @@ if fetch_btn or 'data_loaded' in st.session_state:
         render_deals_tab(target_deals, period)
     with t_news:
         render_news_tab(target_news, period)
-    with t_social:
-        render_social_tab(target_social, period)
+#    with t_social:
+#        render_social_tab(target_social, period)
     with t_dealers:
         render_dealers_tab(company)
     with t_chat:
