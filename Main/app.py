@@ -528,7 +528,7 @@ if fetch_btn or 'data_loaded' in st.session_state:
 #    with t_social:
 #        render_social_tab(target_social, period)
     with t_dealers:
-        render_dealers_tab(company)
+        render_dealers_tab()
     with t_chat:
         render_aibot_tab(market_data, period)
     with t_tenders:
