@@ -1,932 +1,1580 @@
-# import streamlit as st
-# import pandas as pd
-# import requests
-# import re
-# import json
-# import time
-# from datetime import datetime
-# import plotly.express as px
-
-# # Import from your shared_config
-# from Main.shared_config import (
-#     get_groq_client, get_tavily_key, safe_json_parse, style_plotly_dark, ACCENT_MAP, PLOT_COLORS
-# )
-
-# def _hex_to_rgb(hex_color: str) -> str:
-#     try:
-#         hex_color = hex_color.lstrip('#')
-#         r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-#         return f"{r},{g},{b}"
-#     except:
-#         return "255,92,10"
-
-# # =========================================================
-# # 🌐 1. DYNAMIC COMPANY DATA FETCH (100% ONLINE)
-# # =========================================================
-# @st.cache_data(ttl=3600, show_spinner=False)
-# def fetch_company_data_dynamic(company: str, period: str):
-#     start_year = int(period.split("-")[0].replace("FY ", "").strip())
-#     target_year = start_year + 1
-#     current_year = datetime.now().year
-#     short_fy = f"FY{str(target_year)[-2:]}"
-
-#     default_data = {
-#         "company": company, "estimated_annual_cr": 0.0, "q1_cr": 0.0, "q2_cr": 0.0, "q3_cr": 0.0, "q4_cr": 0.0,
-#         "units_annual": 0, "units_q1": 0, "units_q2": 0, "units_q3": 0, "units_q4": 0,
-#         "growth_percent": "N/A", "source_url": "#", "data_source_type": "FADA / Live Web Fetch"
-#     }
-
-#     if start_year > current_year:
-#         default_data["data_source_type"] = "Awaiting Data"
-#         return default_data
-
-#     search_term = company
-#     if company == "Swaraj": search_term = "Swaraj Tractors"
-#     elif company == "John Deere": search_term = "John Deere tractor India"
-#     elif company == "TAFE": search_term = "TAFE Tractors"
-#     elif company == "Mahindra": search_term = "Mahindra farm equipment tractor"
-#     elif company == "Escorts Kubota": search_term = "Escorts Kubota agri machinery"
-#     elif company == "Sonalika": search_term = "Sonalika International Tractors ITL" 
-
-#     query = f"{search_term} tractor retail sales units India {start_year} {target_year} {short_fy} FADA"
-#     tavily_text = ""
-
-#     for attempt in range(4):
-#         try:
-#             tavily_resp = requests.post(
-#                 "https://api.tavily.com/search",
-#                 json={"api_key": get_tavily_key(), "query": query, "search_depth": "advanced", "max_results": 6},
-#                 timeout=15
-#             )
-#             if tavily_resp.status_code == 200:
-#                 data = tavily_resp.json()
-#                 for res in data.get("results", []):
-#                     tavily_text += res['content'] + " "
-#                     if "sales" in res['url'].lower() or "fada" in res['url'].lower() or "auto" in res['url'].lower():
-#                         default_data["source_url"] = res['url'] 
-#                 if len(tavily_text) > 100:
-#                     break 
-#             time.sleep(0.1) 
-#         except Exception:
-#             time.sleep(0.1)
-
-#     prompt = f"""
-#     Extract ONLY the total tractor retail sales units in India for '{company}' in the financial year {start_year}-{target_year} ({short_fy}).
-#     Use only official FADA or industry report numbers. DO NOT include car/auto sales.
-#     Text: {tavily_text[:6000]}
-#     Return ONLY JSON: {{"units_annual": 0, "growth_percent": "+0.0%"}}
-#     If no clear number is found, set units_annual to 0. Do not invent data.
-#     """
-    
-#     u_annual = 0
-#     growth_val = "N/A"
-
-#     for attempt in range(4):
-#         try:
-#             client = get_groq_client()
-#             ai_res = client.chat.completions.create(
-#                 messages=[{"role": "user", "content": prompt}],
-#                 model="llama-3.3-70b-versatile",
-#                 response_format={"type": "json_object"},
-#                 temperature=0.0
-#             )
-            
-#             ai_data = safe_json_parse(ai_res.choices[0].message.content)
-#             u_annual = int(ai_data.get("units_annual", 0))
-#             growth_val = str(ai_data.get("growth_percent", "N/A"))
-            
-#             if u_annual > 0:
-#                 if growth_val != "N/A" and not growth_val.startswith(("+", "-")) and growth_val[0].isdigit():
-#                     growth_val = "+" + growth_val
-#                 break
-#             time.sleep(0.1)
-#         except Exception:
-#             time.sleep(0.1)
-
-#     if u_annual == 0 and tavily_text:
-#         patterns = [r'(\d{1,3}(?:,\d{3})+|\d{4,7})\s*(?:tractors|units)', r'(\d+(?:\.\d+)?)\s*lakh\s*(?:tractors|units)']
-#         for pat in patterns:
-#             match = re.search(pat, tavily_text, re.IGNORECASE)
-#             if match:
-#                 val_str = match.group(1).replace(',', '')
-#                 if 'lakh' in pat: u_annual = int(float(val_str) * 100000)
-#                 else: u_annual = int(val_str)
-#                 break
-
-#     if u_annual > 600000: u_annual = 0
-
-#     default_data["units_annual"] = u_annual
-#     default_data["growth_percent"] = growth_val if growth_val != "N/A" else "N/A"
-#     default_data["estimated_annual_cr"] = u_annual * 0.065 
-
-#     ann_rev = default_data["estimated_annual_cr"]
-#     ann_u = default_data["units_annual"]
-    
-#     default_data["q1_cr"], default_data["q2_cr"], default_data["q3_cr"], default_data["q4_cr"] = ann_rev*0.20, ann_rev*0.25, ann_rev*0.35, ann_rev*0.20
-#     default_data["q4_is_est"] = True
-
-#     default_data["units_q1"], default_data["units_q2"], default_data["units_q3"], default_data["units_q4"] = int(ann_u*0.20), int(ann_u*0.25), int(ann_u*0.35), int(ann_u*0.20)
-
-#     default_data["monthly_avg_cr"] = ann_rev / 12 if ann_rev else 0
-#     default_data["monthly_avg_units"] = ann_u / 12 if ann_u else 0
-
-#     return default_data
-
-# # =========================================================
-# # 📍 2. REGIONAL SALES FETCH (CITY/DISTRICT WISE)
-# # =========================================================
-# @st.cache_data(ttl=3600, show_spinner=False)
-# def get_location_sales(state="All", district="All", city="All", year="2026"):
-    
-#     loc_parts = []
-#     if state != "All": loc_parts.append(state)
-#     if district != "All": loc_parts.append(district)
-#     if city != "All": loc_parts.append(city)
-#     location_str = ", ".join(loc_parts)
-
-#     # Realistic proxy base units if API fails for small cities
-#     base_units = 900000
-#     if city != "All": base_units = 750
-#     elif district != "All": base_units = 4500
-#     elif state != "All": base_units = 55000
-
-#     query = f"tractor registration sales units {year} in {location_str} brand-wise Mahindra TAFE Sonalika Escorts John Deere"
-#     tavily_text = ""
-
-#     for attempt in range(4):
-#         try:
-#             resp = requests.post(
-#                 "https://api.tavily.com/search",
-#                 json={"api_key": get_tavily_key(), "query": query, "search_depth": "advanced", "max_results": 5},
-#                 timeout=15
-#             )
-#             if resp.status_code == 200:
-#                 for res in resp.json().get("results", []):
-#                     tavily_text += res['content'] + " "
-#                 if len(tavily_text) > 50:
-#                     break
-#             time.sleep(0.1)
-#         except Exception:
-#             time.sleep(0.1)
-
-#     prompt = f"""
-#     Extract exact tractor retail units sold for each brand in location: {location_str} for year {year}.
-#     Brands: Mahindra, TAFE, Sonalika, Escorts Kubota, John Deere.
-#     Return JSON ONLY: {{"sales_data": [{{"brand": "Mahindra", "units": 1000}}], "summary": "short insight"}}
-#     If no exact numbers are found, output units as 0. Do not invent.
-#     Text: {tavily_text[:5000]}
-#     """
-    
-#     final_data = []
-#     summary = "Data fetched dynamically."
-
-#     for attempt in range(4):
-#         try:
-#             client = get_groq_client()
-#             ai_res = client.chat.completions.create(
-#                 messages=[{"role": "user", "content": prompt}],
-#                 model="llama-3.3-70b-versatile",
-#                 response_format={"type": "json_object"},
-#                 temperature=0.0
-#             )
-#             data = safe_json_parse(ai_res.choices[0].message.content)
-#             if data.get("sales_data") and data["sales_data"][0].get("units", 0) > 0:
-#                 final_data = data["sales_data"]
-#                 summary = data.get("summary", f"Official Vahan extraction for {location_str}.")
-#                 break
-#             time.sleep(0.1)
-#         except Exception:
-#             time.sleep(0.1)
-
-#     all_brands = ["Mahindra", "TAFE", "Sonalika", "Escorts Kubota", "John Deere"]
-#     market_shares = {"Mahindra": 41.0, "TAFE": 18.0, "Sonalika": 12.5, "Escorts Kubota": 10.0, "John Deere": 8.5}
-
-#     # If AI returned 0s (common for small cities), use statistical local proxy
-#     if not final_data or sum([item.get("units", 0) for item in final_data]) == 0:
-#         final_data = []
-#         for brand in all_brands:
-#             final_data.append({"brand": brand, "units": int(base_units * (market_shares[brand] / 100))})
-#         summary = f"Exact FADA figures for {location_str} are unpublished. Displaying highly accurate statistical proxy estimates based on market ratio."
-
-#     clean_data = []
-#     for b in all_brands:
-#         found = next((item for item in final_data if item.get("brand", "").lower() == b.lower() or b.lower() in item.get("brand", "").lower()), None)
-#         units = int(found.get("units", 0)) if found else 0
-#         clean_data.append({"brand": b, "units": units})
-
-#     total = sum(d["units"] for d in clean_data)
-#     for d in clean_data:
-#         d["market_share"] = f"{(d['units'] / total * 100):.1f}%" if total > 0 else "N/A"
-
-#     return {
-#         "metadata": {"state": state, "district": district, "city": city, "query_location": location_str},
-#         "sales_data": clean_data,
-#         "summary": summary,
-#         "total_units": total
-#     }
-
-# # =========================================================
-# # 🔄 MASTER FETCH FUNCTION
-# # =========================================================
-# ALL_COMPANIES = ["Mahindra", "Escorts Kubota", "Sonalika", "TAFE", "Swaraj", "John Deere"]
-
-# @st.cache_data(ttl=3600, show_spinner=False)
-# def fetch_all_sales(period: str):
-#     results = []
-#     for co in ALL_COMPANIES:
-#         results.append(fetch_company_data_dynamic(co, period))
-#     return results
-
-# # =========================================================
-# # 🖥️ UI RENDERER (DASHBOARD)
-# # =========================================================
-# def render_sales_tab(market_data, period, selected_company):
-#     clean_fy = period.replace("FY ", "")
-
-#     if "sales_spotlight" not in st.session_state:
-#         st.session_state.sales_spotlight = "Mahindra"
-
-#     spotlight_company = st.session_state.sales_spotlight
-#     if spotlight_company not in [d['company'] for d in market_data]:
-#         spotlight_company = market_data[0]['company'] if market_data else "Mahindra"
-
-#     st.markdown(f"""
-#     <div class="sec-head">
-#       <div class="sec-head-bar" style="background:#FF5C0A;"></div>
-#       <div class="sec-head-title">OFFICIAL TRACTOR SALES DATA — {clean_fy}</div>
-#       <div class="sec-head-badge">100% DYNAMIC FADA ENGINE</div>
-#     </div>""", unsafe_allow_html=True)
-
-#     spot = next((x for x in market_data if x['company'] == spotlight_company), market_data[0])
-#     accent, glow = ACCENT_MAP.get(spot['company'], ("#FF5C0A", "rgba(255,92,10,.18)"))
-#     g_sp = str(spot['growth_percent'])
-
-#     if "+" in g_sp:
-#         g_arrow, g_color = f"▲ {g_sp}", "#0FE88A"
-#     elif "-" in g_sp:
-#         g_arrow, g_color = f"▼ {g_sp}", "#FF2D55"
-#     else:
-#         g_arrow, g_color = g_sp, "#7b8db5"
-
-#     st.markdown(f"""
-#     <div style="background:linear-gradient(135deg,rgba({_hex_to_rgb(accent)},.13) 0%,rgba({_hex_to_rgb(accent)},.04) 100%);
-#          border:1.5px solid rgba({_hex_to_rgb(accent)},.45);border-radius:12px;padding:18px 26px;margin-bottom:22px;
-#          display:flex;align-items:center;gap:28px;">
-#       <div style="flex-shrink:0;">
-#         <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:4px;color:{accent};">{spot['company'].upper()}</div>
-#         <div style="margin-top:6px;">
-#             <a href="{spot['source_url']}" target="_blank" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:{accent};border:1px solid {accent}55;padding:2px 6px;border-radius:4px;text-decoration:none;">🔗 SOURCE</a>
-#         </div>
-#       </div>
-#       <div style="width:1px;height:50px;background:rgba({_hex_to_rgb(accent)},.25);"></div>
-#       <div>
-#         <div style="font-size:8px;color:#6a7fa8;text-transform:uppercase;">Annual Revenue (Est)</div>
-#         <div style="font-size:34px;font-family:'Bebas Neue';color:#fff;">₹{spot['estimated_annual_cr']:,.2f} <span style="font-size:18px;">Cr</span></div>
-#       </div>
-#       <div style="width:1px;height:50px;background:rgba({_hex_to_rgb(accent)},.25);"></div>
-#       <div>
-#         <div style="font-size:8px;color:#6a7fa8;text-transform:uppercase;">Tractors Sold (Retail)</div>
-#         <div style="font-size:34px;font-family:'Bebas Neue';color:#fff;">{spot['units_annual']:,.0f} <span style="font-size:18px;">Units</span></div>
-#       </div>
-#       <div style="width:1px;height:50px;background:rgba({_hex_to_rgb(accent)},.25);"></div>
-#       <div>
-#         <div style="font-size:8px;color:#6a7fa8;text-transform:uppercase;">YoY Growth</div>
-#         <div style="font-size:28px;font-family:'Bebas Neue';color:{g_color};">{g_arrow}</div>
-#       </div>
-#     </div>""", unsafe_allow_html=True)
-
-#     kpi_cols = st.columns(len(market_data))
-#     for i, res in enumerate(market_data):
-#         with kpi_cols[i]:
-#             card_accent, card_glow = ACCENT_MAP.get(res['company'], ("#FF5C0A","rgba(255,92,10,.18)"))
-#             mp_class = 'kpi-mahindra' if res['company'] == spotlight_company else ''
-            
-#             if st.button("", key=f"kpi_card_{i}_{res['company']}", help=f"Click to focus on {res['company']}"):
-#                 st.session_state.sales_spotlight = res['company']
-#                 st.rerun()
-
-#             st.markdown(f"""
-#             <div class="kpi-card {mp_class}" style="--_accent:{card_accent};--_glow:{card_glow};cursor:pointer;" onclick="document.querySelector('[data-testid=\"stButton\"]:has([key=\"kpi_card_{i}_{res['company']}\"])').click()">
-#               <div>
-#                 <div class="kpi-lbl">Revenue & Units &#183; {period}</div>
-#                 <div class="kpi-company-name">{res['company']}</div>
-#                 <div class="kpi-val">₹{res['estimated_annual_cr']:,.2f}<span> Cr</span></div>
-#               </div>
-#               <div style="margin-top:8px; display:flex; flex-direction:column; gap:2px;">
-#                  <span style="font-size:8px;color:{'#FF2D55' if res['units_annual']==0 else '#0FE88A'};font-weight:bold;">{res['data_source_type']}</span>
-#               </div>
-#             </div>""", unsafe_allow_html=True)
-
-#     st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-
-#     # TABLES
-#     st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#1FD8F0;"></div>
-#       <div class="sec-head-title">TABLE 1: ESTIMATED TRACTOR REVENUE (₹ CRORES)</div></div>""", unsafe_allow_html=True)
-
-#     rev_dict = [{
-#         "Company": item["company"],
-#         "Monthly Avg": f"₹ {item['monthly_avg_cr']:,.2f}",
-#         "Q1": f"₹ {item['q1_cr']:,.2f}",
-#         "Q2": f"₹ {item['q2_cr']:,.2f}",
-#         "Q3": f"₹ {item['q3_cr']:,.2f}",
-#         "Q4": f"₹ {item['q4_cr']:,.2f}",
-#         "Annual Total": f"₹ {item['estimated_annual_cr']:,.2f}"
-#     } for item in market_data]
-#     st.dataframe(pd.DataFrame(rev_dict), use_container_width=True, hide_index=True)
-
-#     st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-
-#     st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#9D6FFF;"></div>
-#       <div class="sec-head-title">TABLE 2: TRACTOR UNITS SOLD (FADA/RETAIL)</div></div>""", unsafe_allow_html=True)
-
-#     units_dict = [{
-#         "Company": item["company"],
-#         "Monthly Avg": f"{item['monthly_avg_units']:,.0f}",
-#         "Q1": f"{item['units_q1']:,.0f}",
-#         "Q2": f"{item['units_q2']:,.0f}",
-#         "Q3": f"{item['units_q3']:,.0f}",
-#         "Q4": f"{item['units_q4']:,.0f}",
-#         "Annual Total": f"{item['units_annual']:,.0f}",
-#         "YoY Growth": item["growth_percent"]
-#     } for item in market_data]
-#     st.dataframe(pd.DataFrame(units_dict), use_container_width=True, hide_index=True)
-
-#     st.markdown("<div style='height:36px'></div>", unsafe_allow_html=True)
-
-#     # CHARTS (ALL 3 RESTORED)
-#     st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#0FE88A;"></div>
-#       <div class="sec-head-title">1. QUARTERLY REVENUE TRAJECTORY (LINE CHART)</div></div>""", unsafe_allow_html=True)
-    
-#     line_data = []
-#     for item in market_data:
-#         line_data.extend([
-#             {"Company": item["company"], "Quarter": "Q1", "Revenue (₹ Cr)": item["q1_cr"]},
-#             {"Company": item["company"], "Quarter": "Q2", "Revenue (₹ Cr)": item["q2_cr"]},
-#             {"Company": item["company"], "Quarter": "Q3", "Revenue (₹ Cr)": item["q3_cr"]},
-#             {"Company": item["company"], "Quarter": "Q4", "Revenue (₹ Cr)": item["q4_cr"]},
-#         ])
-#     df_line = pd.DataFrame(line_data)
-#     if not df_line.empty and df_line["Revenue (₹ Cr)"].sum() > 0:
-#         fig_line = px.line(df_line, x="Quarter", y="Revenue (₹ Cr)", color="Company", color_discrete_map=PLOT_COLORS, markers=True)
-#         st.plotly_chart(style_plotly_dark(fig_line), use_container_width=True)
-
-#     st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-
-#     # RESTORED DONUT CHART
-#     st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#FF2D55;"></div>
-#       <div class="sec-head-title">2. REVENUE MARKET SHARE (DONUT CHART)</div></div>""", unsafe_allow_html=True)
-    
-#     pie_df = pd.DataFrame(market_data)
-#     if pie_df["estimated_annual_cr"].sum() > 0:
-#         fig_pie = px.pie(pie_df, values="estimated_annual_cr", names="company", hole=0.55, color="company", color_discrete_map=PLOT_COLORS)
-#         fig_pie.update_traces(textinfo='percent+label', textposition='inside', hovertemplate="<b>%{label}</b><br>₹%{value:,.2f} Cr<br>%{percent:.1%}")
-#         fig_pie.update_layout(height=400, showlegend=True, margin=dict(t=20, b=20))
-#         st.plotly_chart(style_plotly_dark(fig_pie), use_container_width=True)
-
-#     st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-
-#     # RESTORED BAR CHART
-#     st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#3B82F6;"></div>
-#       <div class="sec-head-title">3. TOTAL UNITS SOLD COMPARISON (BAR CHART)</div></div>""", unsafe_allow_html=True)
-    
-#     if pie_df["units_annual"].sum() > 0:
-#         fig_units = px.bar(pie_df, x="company", y="units_annual", color="company", color_discrete_map=PLOT_COLORS, text="units_annual")
-#         fig_units.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-#         fig_units.update_layout(height=400, showlegend=False, yaxis_title="Total Units Sold", xaxis_title="Company", margin=dict(t=20, b=20))
-#         st.plotly_chart(style_plotly_dark(fig_units), use_container_width=True)
-
-
-#     # =========================================================
-#     # 🌍 3. REGIONAL REGISTRATION INTELLIGENCE (NEW LOGIC)
-#     # =========================================================
-#     st.markdown("---")
-#     st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#EAB308;"></div>
-#       <div class="sec-head-title">REGIONAL REGISTRATION INTELLIGENCE (VAHAN)</div>
-#       <div class="sec-head-badge">AI LOCATION FILTER</div></div>""", unsafe_allow_html=True)
-
-#     col_s, col_d, col_c, col_btn = st.columns([1, 1, 1, 1])
-#     with col_s:
-#         state_list = ["All", "Punjab", "Haryana", "Maharashtra", "Uttar Pradesh", "Madhya Pradesh", "Gujarat", "Rajasthan", "Karnataka"]
-#         state_sel = st.selectbox("State", state_list)
-#     with col_d:
-#         district_sel = st.text_input("District", value="All")
-#     with col_c:
-#         city_sel = st.text_input("City", value="All")
-#     with col_btn:
-#         st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True) 
-#         fetch_regional = st.button("Fetch Regional Data", use_container_width=True)
-
-#     if fetch_regional:
-#         # SUPER FAST LOGIC FOR "ALL"
-#         if state_sel == "All" and district_sel == "All" and city_sel == "All":
-#             st.markdown(f"#### 📍 Sales Snapshot: Across India (National Aggregate)")
-#             st.markdown(f"""
-#             <div style="background:rgba(234, 179, 8, 0.1); border-left: 3px solid #EAB308; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-#                 <p style="margin:0; color:#fff;">💡 <b>AI Insight:</b> Displaying consolidated national unit sales data for {clean_fy}.</p>
-#             </div>
-#             """, unsafe_allow_html=True)
-            
-#             national_df = pd.DataFrame([{"Brand": item["company"], "Units Registered": item["units_annual"]} for item in market_data])
-#             total_national = national_df["Units Registered"].sum()
-#             national_df["Market Share"] = (national_df["Units Registered"] / total_national * 100).apply(lambda x: f"{x:.1f}%") if total_national > 0 else "N/A"
-#             st.markdown(f"<p style='color: #0FE88A; font-weight: bold;'>Total Indian Market Size (Tracked): {total_national:,.0f} Units</p>", unsafe_allow_html=True)
-#             st.dataframe(national_df, use_container_width=True, hide_index=True)
-            
-#         else:
-#             with st.spinner(f"Scraping local Vahan data for {state_sel} > {district_sel} > {city_sel}..."):
-#                 target_yr = period.split("-")[0].replace("FY ", "").strip()
-#                 reg_data = get_location_sales(state=state_sel, district=district_sel, city=city_sel, year=target_yr)
-                
-#                 st.markdown(f"#### 📍 Sales Snapshot: {reg_data['metadata']['query_location']}")
-                
-#                 st.markdown(f"""
-#                 <div style="background:rgba(234, 179, 8, 0.1); border-left: 3px solid #EAB308; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-#                     <p style="margin:0; color:#fff;">💡 <b>AI Insight:</b> {reg_data['summary']}</p>
-#                 </div>
-#                 """, unsafe_allow_html=True)
-                
-#                 reg_df = pd.DataFrame(reg_data['sales_data'])
-#                 if not reg_df.empty and 'units' in reg_df.columns:
-#                     total_loc_units = reg_data['total_units']
-#                     st.markdown(f"<p style='color: #0FE88A; font-weight: bold;'>Total Units Sold in this Region: {total_loc_units:,.0f}</p>", unsafe_allow_html=True)
-                    
-#                     reg_df.rename(columns={"brand": "Brand", "units": "Units Registered", "market_share": "Market Share"}, inplace=True)
-#                     st.dataframe(reg_df, use_container_width=True, hide_index=True)
-
-
 import streamlit as st
 import pandas as pd
 import requests
-import re
 import json
 import time
 from datetime import datetime
 import plotly.express as px
 
-# Import from your shared_config
 from Main.shared_config import (
-    get_groq_client, get_tavily_key, safe_json_parse, style_plotly_dark, ACCENT_MAP, PLOT_COLORS
+    get_groq_client,
+    get_tavily_key,
+    safe_json_parse,
+    style_plotly_dark,
+    ACCENT_MAP,
+    PLOT_COLORS,
 )
+
+
+# =========================================================
+# HELPERS
+# =========================================================
 
 def _hex_to_rgb(hex_color: str) -> str:
     try:
-        hex_color = hex_color.lstrip('#')
-        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        hex_color = hex_color.lstrip("#")
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
         return f"{r},{g},{b}"
-    except:
+    except Exception:
         return "255,92,10"
 
-# =========================================================
-# 🌐 1. DYNAMIC COMPANY DATA FETCH (100% ONLINE, WORLDWIDE)
-# =========================================================
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_company_data_dynamic(company: str, period: str):
-    start_year = int(period.split("-")[0].replace("FY ", "").strip())
-    target_year = start_year + 1
-    current_year = datetime.now().year
-    short_fy = f"FY{str(target_year)[-2:]}"
 
-    default_data = {
-        "company": company, "estimated_annual_cr": 0.0, "q1_cr": 0.0, "q2_cr": 0.0, "q3_cr": 0.0, "q4_cr": 0.0,
-        "units_annual": 0, "units_q1": 0, "units_q2": 0, "units_q3": 0, "units_q4": 0,
-        "growth_percent": "N/A", "source_url": "#", "data_source_type": "Global Industry Report / Live Web Fetch"
+def _safe_float(value, default=None):
+    try:
+        if value is None:
+            return default
+
+        if isinstance(value, str):
+            value = (
+                value.replace(",", "")
+                .replace("₹", "")
+                .replace("%", "")
+                .strip()
+            )
+
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_int(value, default=0):
+    try:
+        if value is None:
+            return default
+
+        if isinstance(value, str):
+            value = (
+                value.replace(",", "")
+                .replace(" ", "")
+                .strip()
+            )
+
+        return int(float(value))
+    except Exception:
+        return default
+
+
+def _normalize_growth(value):
+    if value is None:
+        return "N/A"
+
+    value = str(value).strip()
+
+    if value.lower() in ["", "n/a", "na", "none", "null", "unknown"]:
+        return "N/A"
+
+    try:
+        numeric = float(value.replace("%", "").replace("+", ""))
+        return f"{numeric:+.1f}%"
+    except Exception:
+        return "N/A"
+
+
+def _empty_company_data(company):
+    return {
+        "company": company,
+
+        "units_annual": 0,
+
+        "revenue_annual_cr": None,
+
+        "q1_cr": None,
+        "q2_cr": None,
+        "q3_cr": None,
+        "q4_cr": None,
+
+        "units_q1": None,
+        "units_q2": None,
+        "units_q3": None,
+        "units_q4": None,
+
+        "monthly_avg_cr": None,
+        "monthly_avg_units": None,
+
+        "growth_percent": "N/A",
+
+        "scope": "Unknown",
+
+        "source_url": "#",
+
+        "source_urls": [],
+
+        "source_name": "",
+
+        "data_source_type": "No verified data",
+
+        "confidence": "low",
+
+        "source_description": "",
     }
 
-    if start_year > current_year:
-        default_data["data_source_type"] = "Awaiting Data"
-        return default_data
-
-    search_term = company
-    if company == "Swaraj": search_term = "Swaraj Tractors"
-    elif company == "John Deere": search_term = "John Deere tractor global sales"
-    elif company == "TAFE": search_term = "TAFE Tractors"
-    elif company == "Mahindra": search_term = "Mahindra farm equipment tractor"
-    elif company == "Escorts Kubota": search_term = "Escorts Kubota agri machinery"
-    elif company == "Sonalika": search_term = "Sonalika International Tractors ITL"
-
-    # NOTE: "India" removed from query — ab worldwide/global total sales dhoondhega
-    query = f"{search_term} tractor global worldwide retail sales units {start_year} {target_year} {short_fy} annual report"
-    tavily_text = ""
-
-    for attempt in range(4):
-        try:
-            tavily_resp = requests.post(
-                "https://api.tavily.com/search",
-                json={"api_key": get_tavily_key(), "query": query, "search_depth": "advanced", "max_results": 6},
-                timeout=15
-            )
-            if tavily_resp.status_code == 200:
-                data = tavily_resp.json()
-                for res in data.get("results", []):
-                    tavily_text += res['content'] + " "
-                    if "sales" in res['url'].lower() or "report" in res['url'].lower() or "auto" in res['url'].lower():
-                        default_data["source_url"] = res['url']
-                if len(tavily_text) > 100:
-                    break
-            time.sleep(0.1)
-        except Exception:
-            time.sleep(0.1)
-
-    prompt = f"""
-    Extract ONLY the TOTAL WORLDWIDE (global, all countries combined) tractor retail sales units for '{company}' in the financial year {start_year}-{target_year} ({short_fy}).
-    Use only official company annual reports, investor presentations, or credible industry sources. DO NOT include car/auto sales.
-    If the source only gives a single country's number (e.g. only India or only USA), do NOT treat it as the global total — set units_annual to 0 instead.
-    Text: {tavily_text[:6000]}
-    Return ONLY JSON: {{"units_annual": 0, "growth_percent": "+0.0%"}}
-    If no clear global number is found, set units_annual to 0. Do not invent data.
-    """
-
-    u_annual = 0
-    growth_val = "N/A"
-
-    for attempt in range(4):
-        try:
-            client = get_groq_client()
-            ai_res = client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model="llama-3.3-70b-versatile",
-                response_format={"type": "json_object"},
-                temperature=0.0
-            )
-
-            ai_data = safe_json_parse(ai_res.choices[0].message.content)
-            u_annual = int(ai_data.get("units_annual", 0))
-            growth_val = str(ai_data.get("growth_percent", "N/A"))
-
-            if u_annual > 0:
-                if growth_val != "N/A" and not growth_val.startswith(("+", "-")) and growth_val[0].isdigit():
-                    growth_val = "+" + growth_val
-                break
-            time.sleep(0.1)
-        except Exception:
-            time.sleep(0.1)
-
-    if u_annual == 0 and tavily_text:
-        patterns = [r'(\d{1,3}(?:,\d{3})+|\d{4,7})\s*(?:tractors|units)', r'(\d+(?:\.\d+)?)\s*(?:million|lakh)\s*(?:tractors|units)']
-        for pat in patterns:
-            match = re.search(pat, tavily_text, re.IGNORECASE)
-            if match:
-                val_str = match.group(1).replace(',', '')
-                if 'million' in pat:
-                    u_annual = int(float(val_str) * 1000000)
-                elif 'lakh' in pat:
-                    u_annual = int(float(val_str) * 100000)
-                else:
-                    u_annual = int(val_str)
-                break
-
-    # Global cap raised — worldwide totals for big players (e.g. John Deere, Mahindra) can run well above India-only caps
-    if u_annual > 5000000: u_annual = 0
-
-    default_data["units_annual"] = u_annual
-    default_data["growth_percent"] = growth_val if growth_val != "N/A" else "N/A"
-    default_data["estimated_annual_cr"] = u_annual * 0.065
-
-    ann_rev = default_data["estimated_annual_cr"]
-    ann_u = default_data["units_annual"]
-
-    default_data["q1_cr"], default_data["q2_cr"], default_data["q3_cr"], default_data["q4_cr"] = ann_rev*0.20, ann_rev*0.25, ann_rev*0.35, ann_rev*0.20
-    default_data["q4_is_est"] = True
-
-    default_data["units_q1"], default_data["units_q2"], default_data["units_q3"], default_data["units_q4"] = int(ann_u*0.20), int(ann_u*0.25), int(ann_u*0.35), int(ann_u*0.20)
-
-    default_data["monthly_avg_cr"] = ann_rev / 12 if ann_rev else 0
-    default_data["monthly_avg_units"] = ann_u / 12 if ann_u else 0
-
-    return default_data
 
 # =========================================================
-# 📍 2. REGIONAL SALES FETCH (COUNTRY / STATE / DISTRICT / CITY WISE)
+# TAVILY
 # =========================================================
+
+def _tavily_search(query, max_results=8):
+
+    api_key = get_tavily_key()
+
+    if not api_key:
+        return {
+            "answer": "",
+            "results": []
+        }
+
+    try:
+
+        response = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": api_key,
+                "query": query,
+                "search_depth": "advanced",
+                "max_results": max_results,
+                "include_answer": True,
+                "include_raw_content": True,
+            },
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            st.warning(
+                f"Tavily HTTP error: {response.status_code}"
+            )
+            return {
+                "answer": "",
+                "results": []
+            }
+
+        return response.json()
+
+    except requests.RequestException as e:
+
+        st.warning(f"Tavily request failed: {e}")
+
+        return {
+            "answer": "",
+            "results": []
+        }
+
+    except Exception as e:
+
+        st.warning(f"Tavily error: {e}")
+
+        return {
+            "answer": "",
+            "results": []
+        }
+
+
+# =========================================================
+# COMPANY SEARCH
+# =========================================================
+
+def _build_company_queries(company, start_year, end_year):
+
+    return [
+        (
+            f'"{company}" tractor sales '
+            f'{start_year} {end_year} annual report units'
+        ),
+
+        (
+            f'"{company}" tractors sold '
+            f'{start_year} {end_year}'
+        ),
+
+        (
+            f'"{company}" tractor volume '
+            f'{start_year} {end_year}'
+        ),
+
+        (
+            f'"{company}" tractor sales investor presentation '
+            f'{start_year} {end_year}'
+        ),
+
+        (
+            f'"{company}" agricultural tractor sales '
+            f'{start_year} {end_year}'
+        ),
+
+        (
+            f'"{company}" tractor wholesale retail sales '
+            f'{start_year} {end_year}'
+        ),
+    ]
+
+
+# =========================================================
+# COLLECT WEB RESEARCH
+# =========================================================
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_location_sales(country="All", state="All", district="All", city="All", year="2026"):
+def collect_company_web_data(company, start_year, end_year):
 
-    loc_parts = []
-    if country != "All": loc_parts.append(country)
-    if state != "All": loc_parts.append(state)
-    if district != "All": loc_parts.append(district)
-    if city != "All": loc_parts.append(city)
-    location_str = ", ".join(loc_parts) if loc_parts else "Worldwide"
+    queries = _build_company_queries(
+        company,
+        start_year,
+        end_year
+    )
 
-    # Realistic proxy base units if API fails for a given granularity.
-    # Broader scope (whole world) -> bigger base; narrower (a single city) -> smaller base.
-    if city != "All":
-        base_units = 750
-    elif district != "All":
-        base_units = 4500
-    elif state != "All":
-        base_units = 55000
-    elif country != "All":
-        base_units = 900000
-    else:
-        base_units = 3000000  # Global / worldwide aggregate proxy
+    all_results = []
+    all_urls = []
+    answers = []
 
-    query = f"tractor registration sales units {year} in {location_str} brand-wise Mahindra TAFE Sonalika Escorts John Deere Kubota New Holland Case IH"
-    tavily_text = ""
+    for query in queries:
 
-    for attempt in range(4):
-        try:
-            resp = requests.post(
-                "https://api.tavily.com/search",
-                json={"api_key": get_tavily_key(), "query": query, "search_depth": "advanced", "max_results": 5},
-                timeout=15
-            )
-            if resp.status_code == 200:
-                for res in resp.json().get("results", []):
-                    tavily_text += res['content'] + " "
-                if len(tavily_text) > 50:
-                    break
-            time.sleep(0.1)
-        except Exception:
-            time.sleep(0.1)
+        data = _tavily_search(query, max_results=6)
 
-    prompt = f"""
-    Extract exact tractor retail units sold for each brand in location: {location_str} for year {year}.
-    Brands: Mahindra, TAFE, Sonalika, Escorts Kubota, John Deere.
-    Return JSON ONLY: {{"sales_data": [{{"brand": "Mahindra", "units": 1000}}], "summary": "short insight"}}
-    If no exact numbers are found, output units as 0. Do not invent.
-    Text: {tavily_text[:5000]}
-    """
+        answer = data.get("answer", "")
 
-    final_data = []
-    summary = "Data fetched dynamically."
+        if answer:
+            answers.append(answer)
 
-    for attempt in range(4):
-        try:
-            client = get_groq_client()
-            ai_res = client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model="llama-3.3-70b-versatile",
-                response_format={"type": "json_object"},
-                temperature=0.0
-            )
-            data = safe_json_parse(ai_res.choices[0].message.content)
-            if data.get("sales_data") and data["sales_data"][0].get("units", 0) > 0:
-                final_data = data["sales_data"]
-                summary = data.get("summary", f"Official extraction for {location_str}.")
-                break
-            time.sleep(0.1)
-        except Exception:
-            time.sleep(0.1)
+        for result in data.get("results", []):
 
-    all_brands = ["Mahindra", "TAFE", "Sonalika", "Escorts Kubota", "John Deere"]
-    market_shares = {"Mahindra": 41.0, "TAFE": 18.0, "Sonalika": 12.5, "Escorts Kubota": 10.0, "John Deere": 8.5}
+            url = result.get("url", "")
 
-    # If AI returned 0s (common for small cities / less-documented regions), use statistical local proxy
-    if not final_data or sum([item.get("units", 0) for item in final_data]) == 0:
-        final_data = []
-        for brand in all_brands:
-            final_data.append({"brand": brand, "units": int(base_units * (market_shares[brand] / 100))})
-        summary = f"Exact figures for {location_str} are unpublished. Displaying statistical proxy estimates based on approximate market ratio (reference distribution)."
+            content = result.get("content", "")
 
-    clean_data = []
-    for b in all_brands:
-        found = next((item for item in final_data if item.get("brand", "").lower() == b.lower() or b.lower() in item.get("brand", "").lower()), None)
-        units = int(found.get("units", 0)) if found else 0
-        clean_data.append({"brand": b, "units": units})
+            raw_content = result.get("raw_content", "")
 
-    total = sum(d["units"] for d in clean_data)
-    for d in clean_data:
-        d["market_share"] = f"{(d['units'] / total * 100):.1f}%" if total > 0 else "N/A"
+            title = result.get("title", "")
+
+            if url:
+                all_urls.append(url)
+
+            all_results.append({
+                "title": title,
+                "url": url,
+                "content": content,
+                "raw_content": raw_content,
+            })
+
+        time.sleep(0.2)
+
+    # Remove duplicate URLs
+    unique_urls = list(dict.fromkeys(all_urls))
+
+    # Remove duplicate search results
+    unique_results = []
+
+    seen = set()
+
+    for item in all_results:
+
+        key = (
+            item.get("url", ""),
+            item.get("title", "")
+        )
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique_results.append(item)
+
+    # Build research text
+    research_parts = []
+
+    for answer in answers:
+        research_parts.append(
+            f"SEARCH ANSWER:\n{answer}"
+        )
+
+    for item in unique_results:
+
+        research_parts.append(
+            "\n".join([
+                f"TITLE: {item.get('title', '')}",
+                f"URL: {item.get('url', '')}",
+                f"CONTENT: {item.get('content', '')}",
+                f"RAW CONTENT: {item.get('raw_content', '')}",
+            ])
+        )
+
+    research_text = "\n\n".join(research_parts)
+
+    # Keep prompt manageable
+    research_text = research_text[:30000]
 
     return {
-        "metadata": {"country": country, "state": state, "district": district, "city": city, "query_location": location_str},
-        "sales_data": clean_data,
-        "summary": summary,
-        "total_units": total
+        "research_text": research_text,
+        "source_urls": unique_urls,
+        "results": unique_results,
     }
 
+
 # =========================================================
-# 🔄 MASTER FETCH FUNCTION
+# GROQ EXTRACTION
 # =========================================================
-ALL_COMPANIES = ["Mahindra", "Escorts Kubota", "Sonalika", "TAFE", "Swaraj", "John Deere"]
+
+def _extract_company_data_with_groq(
+    company,
+    start_year,
+    end_year,
+    research
+):
+
+    client = get_groq_client()
+
+    if client is None:
+        return None
+
+    research_text = research.get(
+        "research_text",
+        ""
+    )
+
+    if not research_text.strip():
+        return None
+
+    prompt = f"""
+You are a strict financial data extraction engine.
+
+COMPANY:
+{company}
+
+FINANCIAL YEAR:
+{start_year}-{end_year}
+
+Your task is to extract ONLY information explicitly supported
+by the supplied research.
+
+IMPORTANT RULES:
+
+1. Never invent a number.
+
+2. Never estimate a number.
+
+3. Never use a market-share assumption.
+
+4. Never use a proxy.
+
+5. Never multiply tractor units by an assumed tractor price.
+
+6. Never create quarterly numbers unless quarterly numbers are
+   explicitly present in the source.
+
+7. Never convert a country number into a worldwide number.
+
+8. Determine the geographical scope of every number.
+
+9. Tractor sales means agricultural/farm tractors only.
+
+10. Ignore:
+    - cars
+    - SUVs
+    - trucks
+    - motorcycles
+    - total automobiles
+    - general vehicles
+    - revenue unless explicitly reported as tractor/farm-equipment revenue
+
+11. If the source reports GLOBAL/WORLDWIDE tractor units,
+    return that number.
+
+12. If the source reports INDIA tractor units only,
+    return the number but set scope to "India".
+
+13. If the source reports USA tractor units only,
+    return the number but set scope to "USA".
+
+14. If the source reports another country,
+    return that country as the scope.
+
+15. If there is no reliable tractor-unit number, return 0.
+
+16. Revenue must only be returned if the source explicitly
+    reports revenue associated with the relevant tractor/farm
+    equipment business.
+
+17. Do not calculate revenue from units.
+
+18. Do not calculate quarterly revenue from annual revenue.
+
+19. Do not calculate quarterly units from annual units.
+
+20. Growth must only be returned if explicitly supported by
+    the source.
+
+21. Select the source that most directly supports the extracted
+    number.
+
+22. Give the URL of the supporting source when available.
+
+Return ONLY valid JSON.
+
+Required structure:
+
+{{
+    "company": "{company}",
+    "units_annual": 0,
+    "units_scope": "Unknown",
+
+    "revenue_annual_cr": null,
+    "revenue_currency": null,
+    "revenue_scope": "Unknown",
+
+    "q1_units": null,
+    "q2_units": null,
+    "q3_units": null,
+    "q4_units": null,
+
+    "q1_revenue_cr": null,
+    "q2_revenue_cr": null,
+    "q3_revenue_cr": null,
+    "q4_revenue_cr": null,
+
+    "growth_percent": "N/A",
+
+    "source_name": "",
+    "source_url": "",
+
+    "confidence": "low",
+
+    "source_description": ""
+}}
+
+WEB RESEARCH:
+
+{research_text}
+"""
+
+    try:
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a factual financial research "
+                        "extraction system. Never invent data."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            response_format={
+                "type": "json_object"
+            },
+            temperature=0,
+        )
+
+        content = response.choices[0].message.content
+
+        return safe_json_parse(content)
+
+    except Exception as e:
+
+        st.warning(
+            f"Groq extraction failed for {company}: {e}"
+        )
+
+        return None
+
+
+# =========================================================
+# COMPANY DATA
+# =========================================================
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_all_sales(period: str):
+def fetch_company_data_dynamic(company, period):
+
+    data = _empty_company_data(company)
+
+    # -----------------------------------------------------
+    # YEAR
+    # -----------------------------------------------------
+
+    try:
+
+        clean_period = (
+            period
+            .replace("FY ", "")
+            .strip()
+        )
+
+        start_year = int(
+            clean_period.split("-")[0]
+        )
+
+        end_year = start_year + 1
+
+    except Exception:
+
+        data["data_source_type"] = (
+            "Invalid financial year"
+        )
+
+        return data
+
+    # -----------------------------------------------------
+    # FUTURE YEAR
+    # -----------------------------------------------------
+
+    if start_year > datetime.now().year:
+
+        data["data_source_type"] = (
+            "Financial year not yet available"
+        )
+
+        return data
+
+    # -----------------------------------------------------
+    # TAVILY
+    # -----------------------------------------------------
+
+    research = collect_company_web_data(
+        company,
+        start_year,
+        end_year
+    )
+
+    if not research["research_text"]:
+
+        data["data_source_type"] = (
+            "Tavily returned no usable research"
+        )
+
+        return data
+
+    # -----------------------------------------------------
+    # GROQ
+    # -----------------------------------------------------
+
+    extracted = _extract_company_data_with_groq(
+        company,
+        start_year,
+        end_year,
+        research
+    )
+
+    if not extracted:
+
+        data["data_source_type"] = (
+            "Groq could not extract verified data"
+        )
+
+        return data
+
+    # -----------------------------------------------------
+    # UNITS
+    # -----------------------------------------------------
+
+    units = _safe_int(
+        extracted.get("units_annual"),
+        0
+    )
+
+    units_scope = str(
+        extracted.get(
+            "units_scope",
+            "Unknown"
+        )
+    )
+
+    # -----------------------------------------------------
+    # REVENUE
+    # -----------------------------------------------------
+
+    revenue = _safe_float(
+        extracted.get("revenue_annual_cr"),
+        None
+    )
+
+    revenue_scope = str(
+        extracted.get(
+            "revenue_scope",
+            "Unknown"
+        )
+    )
+
+    # -----------------------------------------------------
+    # QUARTERLY UNITS
+    # -----------------------------------------------------
+
+    q_units = [
+        _safe_int(
+            extracted.get("q1_units"),
+            None
+        ),
+        _safe_int(
+            extracted.get("q2_units"),
+            None
+        ),
+        _safe_int(
+            extracted.get("q3_units"),
+            None
+        ),
+        _safe_int(
+            extracted.get("q4_units"),
+            None
+        ),
+    ]
+
+    # -----------------------------------------------------
+    # QUARTERLY REVENUE
+    # -----------------------------------------------------
+
+    q_revenue = [
+        _safe_float(
+            extracted.get("q1_revenue_cr"),
+            None
+        ),
+        _safe_float(
+            extracted.get("q2_revenue_cr"),
+            None
+        ),
+        _safe_float(
+            extracted.get("q3_revenue_cr"),
+            None
+        ),
+        _safe_float(
+            extracted.get("q4_revenue_cr"),
+            None
+        ),
+    ]
+
+    # -----------------------------------------------------
+    # GROWTH
+    # -----------------------------------------------------
+
+    growth = _normalize_growth(
+        extracted.get(
+            "growth_percent",
+            "N/A"
+        )
+    )
+
+    # -----------------------------------------------------
+    # SOURCE
+    # -----------------------------------------------------
+
+    source_url = str(
+        extracted.get(
+            "source_url",
+            ""
+        )
+    ).strip()
+
+    if not source_url:
+        urls = research.get(
+            "source_urls",
+            []
+        )
+
+        if urls:
+            source_url = urls[0]
+
+    # -----------------------------------------------------
+    # STORE VALUES
+    # -----------------------------------------------------
+
+    data["units_annual"] = units
+
+    data["scope"] = units_scope
+
+    data["revenue_annual_cr"] = revenue
+
+    data["growth_percent"] = growth
+
+    data["q1_cr"] = q_revenue[0]
+    data["q2_cr"] = q_revenue[1]
+    data["q3_cr"] = q_revenue[2]
+    data["q4_cr"] = q_revenue[3]
+
+    data["units_q1"] = q_units[0]
+    data["units_q2"] = q_units[1]
+    data["units_q3"] = q_units[2]
+    data["units_q4"] = q_units[3]
+
+    data["monthly_avg_cr"] = (
+        revenue / 12
+        if revenue is not None
+        else None
+    )
+
+    data["monthly_avg_units"] = (
+        units / 12
+        if units > 0
+        else None
+    )
+
+    data["source_url"] = (
+        source_url
+        if source_url
+        else "#"
+    )
+
+    data["source_urls"] = (
+        research.get("source_urls", [])
+    )
+
+    data["source_name"] = str(
+        extracted.get(
+            "source_name",
+            ""
+        )
+    )
+
+    data["confidence"] = str(
+        extracted.get(
+            "confidence",
+            "low"
+        )
+    )
+
+    data["source_description"] = str(
+        extracted.get(
+            "source_description",
+            ""
+        )
+    )
+
+    # -----------------------------------------------------
+    # DATA STATUS
+    # -----------------------------------------------------
+
+    if units > 0 and revenue is not None:
+
+        data["data_source_type"] = (
+            f"Live Web + Groq | "
+            f"{units_scope} | "
+            f"{data['confidence']} confidence"
+        )
+
+    elif units > 0:
+
+        data["data_source_type"] = (
+            f"Live Tractor Units | "
+            f"{units_scope} | "
+            f"{data['confidence']} confidence"
+        )
+
+    elif revenue is not None:
+
+        data["data_source_type"] = (
+            f"Live Revenue | "
+            f"{revenue_scope} | "
+            f"{data['confidence']} confidence"
+        )
+
+    else:
+
+        data["data_source_type"] = (
+            "No verified tractor sales data"
+        )
+
+    return data
+
+
+# =========================================================
+# COMPANIES
+# =========================================================
+
+ALL_COMPANIES = [
+    "Mahindra",
+    "Escorts Kubota",
+    "Sonalika",
+    "TAFE",
+    "Swaraj",
+    "John Deere",
+]
+
+
+# =========================================================
+# FETCH ALL
+# =========================================================
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_all_sales(period):
+
     results = []
-    for co in ALL_COMPANIES:
-        results.append(fetch_company_data_dynamic(co, period))
+
+    for company in ALL_COMPANIES:
+
+        result = fetch_company_data_dynamic(
+            company,
+            period
+        )
+
+        results.append(result)
+
     return results
 
+
 # =========================================================
-# 🖥️ UI RENDERER (DASHBOARD)
+# FORMAT VALUE
 # =========================================================
-def render_sales_tab(market_data, period, selected_company):
-    clean_fy = period.replace("FY ", "")
+
+def fmt_number(value, decimals=0):
+
+    if value is None:
+        return "N/A"
+
+    try:
+        return f"{value:,.{decimals}f}"
+    except Exception:
+        return "N/A"
+
+
+def fmt_currency(value):
+
+    if value is None:
+        return "N/A"
+
+    return f"₹ {value:,.2f}"
+
+
+# =========================================================
+# RENDER SALES TAB
+# =========================================================
+
+def render_sales_tab(
+    market_data,
+    period,
+    selected_company
+):
+
+    clean_fy = period.replace(
+        "FY ",
+        ""
+    )
+
+    if not market_data:
+
+        st.warning(
+            "No company data was returned."
+        )
+
+        return
+
+    # -----------------------------------------------------
+    # SPOTLIGHT
+    # -----------------------------------------------------
 
     if "sales_spotlight" not in st.session_state:
-        st.session_state.sales_spotlight = "Mahindra"
 
-    spotlight_company = st.session_state.sales_spotlight
-    if spotlight_company not in [d['company'] for d in market_data]:
-        spotlight_company = market_data[0]['company'] if market_data else "Mahindra"
+        st.session_state.sales_spotlight = (
+            selected_company
+            if selected_company in ALL_COMPANIES
+            else ALL_COMPANIES[0]
+        )
 
-    st.markdown(f"""
-    <div class="sec-head">
-      <div class="sec-head-bar" style="background:#FF5C0A;"></div>
-      <div class="sec-head-title">GLOBAL TRACTOR SALES DATA — {clean_fy}</div>
-      <div class="sec-head-badge">100% DYNAMIC WORLDWIDE SALES ENGINE</div>
-    </div>""", unsafe_allow_html=True)
+    spotlight_company = (
+        st.session_state.sales_spotlight
+    )
 
-    spot = next((x for x in market_data if x['company'] == spotlight_company), market_data[0])
-    accent, glow = ACCENT_MAP.get(spot['company'], ("#FF5C0A", "rgba(255,92,10,.18)"))
-    g_sp = str(spot['growth_percent'])
+    available_companies = [
+        x["company"]
+        for x in market_data
+    ]
 
-    if "+" in g_sp:
-        g_arrow, g_color = f"▲ {g_sp}", "#0FE88A"
-    elif "-" in g_sp:
-        g_arrow, g_color = f"▼ {g_sp}", "#FF2D55"
-    else:
-        g_arrow, g_color = g_sp, "#7b8db5"
+    if spotlight_company not in available_companies:
 
-    st.markdown(f"""
-    <div style="background:linear-gradient(135deg,rgba({_hex_to_rgb(accent)},.13) 0%,rgba({_hex_to_rgb(accent)},.04) 100%);
-         border:1.5px solid rgba({_hex_to_rgb(accent)},.45);border-radius:12px;padding:18px 26px;margin-bottom:22px;
-         display:flex;align-items:center;gap:28px;">
-      <div style="flex-shrink:0;">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:4px;color:{accent};">{spot['company'].upper()}</div>
-        <div style="margin-top:6px;">
-            <a href="{spot['source_url']}" target="_blank" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:{accent};border:1px solid {accent}55;padding:2px 6px;border-radius:4px;text-decoration:none;">🔗 SOURCE</a>
+        spotlight_company = (
+            available_companies[0]
+        )
+
+    spot = next(
+        (
+            x for x in market_data
+            if x["company"] == spotlight_company
+        ),
+        market_data[0]
+    )
+
+    # -----------------------------------------------------
+    # HEADER
+    # -----------------------------------------------------
+
+    st.markdown(
+        f"""
+        <div class="sec-head">
+            <div class="sec-head-bar"
+                 style="background:#FF5C0A;"></div>
+
+            <div class="sec-head-title">
+                TRACTOR SALES DATA — {clean_fy}
+            </div>
+
+            <div class="sec-head-badge">
+                LIVE WEB + GROQ EXTRACTION
+            </div>
         </div>
-      </div>
-      <div style="width:1px;height:50px;background:rgba({_hex_to_rgb(accent)},.25);"></div>
-      <div>
-        <div style="font-size:8px;color:#6a7fa8;text-transform:uppercase;">Annual Revenue (Est, Global)</div>
-        <div style="font-size:34px;font-family:'Bebas Neue';color:#fff;">₹{spot['estimated_annual_cr']:,.2f} <span style="font-size:18px;">Cr</span></div>
-      </div>
-      <div style="width:1px;height:50px;background:rgba({_hex_to_rgb(accent)},.25);"></div>
-      <div>
-        <div style="font-size:8px;color:#6a7fa8;text-transform:uppercase;">Tractors Sold (Global Retail)</div>
-        <div style="font-size:34px;font-family:'Bebas Neue';color:#fff;">{spot['units_annual']:,.0f} <span style="font-size:18px;">Units</span></div>
-      </div>
-      <div style="width:1px;height:50px;background:rgba({_hex_to_rgb(accent)},.25);"></div>
-      <div>
-        <div style="font-size:8px;color:#6a7fa8;text-transform:uppercase;">YoY Growth</div>
-        <div style="font-size:28px;font-family:'Bebas Neue';color:{g_color};">{g_arrow}</div>
-      </div>
-    </div>""", unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
 
-    kpi_cols = st.columns(len(market_data))
-    for i, res in enumerate(market_data):
+    accent, glow = ACCENT_MAP.get(
+        spot["company"],
+        (
+            "#FF5C0A",
+            "rgba(255,92,10,.18)"
+        )
+    )
+
+    growth = spot["growth_percent"]
+
+    if growth.startswith("+"):
+
+        growth_color = "#0FE88A"
+        growth_display = f"▲ {growth}"
+
+    elif growth.startswith("-"):
+
+        growth_color = "#FF2D55"
+        growth_display = f"▼ {growth}"
+
+    else:
+
+        growth_color = "#7b8db5"
+        growth_display = "N/A"
+
+    # -----------------------------------------------------
+    # SPOTLIGHT CARD
+    # -----------------------------------------------------
+
+    revenue_display = (
+        f"₹{spot['revenue_annual_cr']:,.2f} Cr"
+        if spot["revenue_annual_cr"] is not None
+        else "N/A"
+    )
+
+    units_display = (
+        f"{spot['units_annual']:,.0f} Units"
+        if spot["units_annual"] > 0
+        else "N/A"
+    )
+
+    st.markdown(
+        f"""
+        <div style="
+            background:
+            linear-gradient(
+                135deg,
+                rgba({_hex_to_rgb(accent)},.13),
+                rgba({_hex_to_rgb(accent)},.04)
+            );
+            border:1.5px solid
+            rgba({_hex_to_rgb(accent)},.45);
+            border-radius:12px;
+            padding:18px 26px;
+            margin-bottom:22px;
+            display:flex;
+            align-items:center;
+            gap:28px;
+        ">
+
+            <div style="flex-shrink:0;">
+
+                <div style="
+                    font-family:'Bebas Neue';
+                    font-size:28px;
+                    letter-spacing:4px;
+                    color:{accent};
+                ">
+                    {spot['company'].upper()}
+                </div>
+
+                <div style="
+                    margin-top:6px;
+                    font-size:9px;
+                    color:#7b8db5;
+                ">
+                    Scope: {spot['scope']}
+                </div>
+
+                <div style="
+                    margin-top:5px;
+                    font-size:9px;
+                    color:#7b8db5;
+                ">
+                    Confidence: {spot['confidence']}
+                </div>
+
+            </div>
+
+            <div style="
+                width:1px;
+                height:50px;
+                background:
+                rgba({_hex_to_rgb(accent)},.25);
+            "></div>
+
+            <div>
+
+                <div style="
+                    font-size:8px;
+                    color:#6a7fa8;
+                    text-transform:uppercase;
+                ">
+                    Verified Revenue
+                </div>
+
+                <div style="
+                    font-size:30px;
+                    font-family:'Bebas Neue';
+                    color:#fff;
+                ">
+                    {revenue_display}
+                </div>
+
+            </div>
+
+            <div style="
+                width:1px;
+                height:50px;
+                background:
+                rgba({_hex_to_rgb(accent)},.25);
+            "></div>
+
+            <div>
+
+                <div style="
+                    font-size:8px;
+                    color:#6a7fa8;
+                    text-transform:uppercase;
+                ">
+                    Tractor Units
+                </div>
+
+                <div style="
+                    font-size:30px;
+                    font-family:'Bebas Neue';
+                    color:#fff;
+                ">
+                    {units_display}
+                </div>
+
+            </div>
+
+            <div style="
+                width:1px;
+                height:50px;
+                background:
+                rgba({_hex_to_rgb(accent)},.25);
+            "></div>
+
+            <div>
+
+                <div style="
+                    font-size:8px;
+                    color:#6a7fa8;
+                    text-transform:uppercase;
+                ">
+                    YoY Growth
+                </div>
+
+                <div style="
+                    font-size:28px;
+                    font-family:'Bebas Neue';
+                    color:{growth_color};
+                ">
+                    {growth_display}
+                </div>
+
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # -----------------------------------------------------
+    # COMPANY CARDS
+    # -----------------------------------------------------
+
+    kpi_cols = st.columns(
+        len(market_data)
+    )
+
+    for i, item in enumerate(market_data):
+
         with kpi_cols[i]:
-            card_accent, card_glow = ACCENT_MAP.get(res['company'], ("#FF5C0A","rgba(255,92,10,.18)"))
-            mp_class = 'kpi-mahindra' if res['company'] == spotlight_company else ''
 
-            if st.button("", key=f"kpi_card_{i}_{res['company']}", help=f"Click to focus on {res['company']}"):
-                st.session_state.sales_spotlight = res['company']
+            card_accent, card_glow = ACCENT_MAP.get(
+                item["company"],
+                (
+                    "#FF5C0A",
+                    "rgba(255,92,10,.18)"
+                )
+            )
+
+            if st.button(
+                f"Focus {item['company']}",
+                key=f"sales_focus_{i}_{item['company']}",
+                use_container_width=True
+            ):
+
+                st.session_state.sales_spotlight = (
+                    item["company"]
+                )
+
                 st.rerun()
 
-            st.markdown(f"""
-            <div class="kpi-card {mp_class}" style="--_accent:{card_accent};--_glow:{card_glow};cursor:pointer;" onclick="document.querySelector('[data-testid=\"stButton\"]:has([key=\"kpi_card_{i}_{res['company']}\"])').click()">
-              <div>
-                <div class="kpi-lbl">Global Revenue & Units &#183; {period}</div>
-                <div class="kpi-company-name">{res['company']}</div>
-                <div class="kpi-val">₹{res['estimated_annual_cr']:,.2f}<span> Cr</span></div>
-              </div>
-              <div style="margin-top:8px; display:flex; flex-direction:column; gap:2px;">
-                 <span style="font-size:8px;color:{'#FF2D55' if res['units_annual']==0 else '#0FE88A'};font-weight:bold;">{res['data_source_type']}</span>
-              </div>
-            </div>""", unsafe_allow_html=True)
+            revenue = (
+                fmt_currency(
+                    item["revenue_annual_cr"]
+                )
+                if item["revenue_annual_cr"] is not None
+                else "N/A"
+            )
 
-    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            units = (
+                fmt_number(
+                    item["units_annual"]
+                )
+                if item["units_annual"] > 0
+                else "N/A"
+            )
 
-    # TABLES
-    st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#1FD8F0;"></div>
-      <div class="sec-head-title">TABLE 1: ESTIMATED GLOBAL TRACTOR REVENUE (₹ CRORES)</div></div>""", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class="kpi-card"
+                     style="
+                     --_accent:{card_accent};
+                     --_glow:{card_glow};
+                     ">
 
-    rev_dict = [{
-        "Company": item["company"],
-        "Monthly Avg": f"₹ {item['monthly_avg_cr']:,.2f}",
-        "Q1": f"₹ {item['q1_cr']:,.2f}",
-        "Q2": f"₹ {item['q2_cr']:,.2f}",
-        "Q3": f"₹ {item['q3_cr']:,.2f}",
-        "Q4": f"₹ {item['q4_cr']:,.2f}",
-        "Annual Total": f"₹ {item['estimated_annual_cr']:,.2f}"
-    } for item in market_data]
-    rev_df = pd.DataFrame(rev_dict)
-    st.dataframe(rev_df, use_container_width=True, hide_index=True)
-    total_global_rev = sum(item['estimated_annual_cr'] for item in market_data)
-    st.markdown(f"<p style='color:#0FE88A;font-weight:bold;'>🌍 Total Worldwide Revenue (All Companies): ₹ {total_global_rev:,.2f} Cr</p>", unsafe_allow_html=True)
+                    <div class="kpi-lbl">
+                        {period}
+                    </div>
 
-    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+                    <div class="kpi-company-name">
+                        {item['company']}
+                    </div>
 
-    st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#9D6FFF;"></div>
-      <div class="sec-head-title">TABLE 2: TRACTOR UNITS SOLD (GLOBAL RETAIL)</div></div>""", unsafe_allow_html=True)
+                    <div class="kpi-val">
+                        {revenue}
+                    </div>
 
-    units_dict = [{
-        "Company": item["company"],
-        "Monthly Avg": f"{item['monthly_avg_units']:,.0f}",
-        "Q1": f"{item['units_q1']:,.0f}",
-        "Q2": f"{item['units_q2']:,.0f}",
-        "Q3": f"{item['units_q3']:,.0f}",
-        "Q4": f"{item['units_q4']:,.0f}",
-        "Annual Total": f"{item['units_annual']:,.0f}",
-        "YoY Growth": item["growth_percent"]
-    } for item in market_data]
-    st.dataframe(pd.DataFrame(units_dict), use_container_width=True, hide_index=True)
-    total_global_units = sum(item['units_annual'] for item in market_data)
-    st.markdown(f"<p style='color:#0FE88A;font-weight:bold;'>🌍 Total Worldwide Units Sold (All Companies): {total_global_units:,.0f} Units</p>", unsafe_allow_html=True)
+                    <div style="
+                        margin-top:8px;
+                        font-size:10px;
+                        color:#7b8db5;
+                    ">
+                        Tractor Units:
+                        <b style="color:#fff;">
+                            {units}
+                        </b>
+                    </div>
 
-    st.markdown("<div style='height:36px'></div>", unsafe_allow_html=True)
+                    <div style="
+                        margin-top:8px;
+                        font-size:8px;
+                        color:#0FE88A;
+                    ">
+                        {item['data_source_type']}
+                    </div>
 
-    # CHARTS (ALL 3 RESTORED)
-    st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#0FE88A;"></div>
-      <div class="sec-head-title">1. QUARTERLY REVENUE TRAJECTORY (LINE CHART)</div></div>""", unsafe_allow_html=True)
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+    # =====================================================
+    # TABLE 1
+    # =====================================================
+
+    st.markdown(
+        """
+        <div class="sec-head">
+            <div class="sec-head-bar"
+                 style="background:#1FD8F0;"></div>
+            <div class="sec-head-title">
+                TABLE 1: VERIFIED TRACTOR REVENUE
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    revenue_rows = []
+
+    for item in market_data:
+
+        revenue_rows.append({
+            "Company": item["company"],
+            "Monthly Avg": fmt_currency(
+                item["monthly_avg_cr"]
+            ),
+            "Q1": fmt_currency(item["q1_cr"]),
+            "Q2": fmt_currency(item["q2_cr"]),
+            "Q3": fmt_currency(item["q3_cr"]),
+            "Q4": fmt_currency(item["q4_cr"]),
+            "Annual Total": fmt_currency(
+                item["revenue_annual_cr"]
+            ),
+            "Scope": item["scope"],
+        })
+
+    st.dataframe(
+        pd.DataFrame(revenue_rows),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # =====================================================
+    # TABLE 2
+    # =====================================================
+
+    st.markdown(
+        """
+        <div class="sec-head">
+            <div class="sec-head-bar"
+                 style="background:#9D6FFF;"></div>
+            <div class="sec-head-title">
+                TABLE 2: VERIFIED TRACTOR UNITS
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    unit_rows = []
+
+    for item in market_data:
+
+        unit_rows.append({
+            "Company": item["company"],
+
+            "Monthly Avg": fmt_number(
+                item["monthly_avg_units"]
+            ),
+
+            "Q1": fmt_number(
+                item["units_q1"]
+            ),
+
+            "Q2": fmt_number(
+                item["units_q2"]
+            ),
+
+            "Q3": fmt_number(
+                item["units_q3"]
+            ),
+
+            "Q4": fmt_number(
+                item["units_q4"]
+            ),
+
+            "Annual Total": fmt_number(
+                item["units_annual"]
+            ),
+
+            "YoY Growth": item["growth_percent"],
+
+            "Scope": item["scope"],
+        })
+
+    st.dataframe(
+        pd.DataFrame(unit_rows),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # =====================================================
+    # CHART 1 — QUARTERLY REVENUE
+    # =====================================================
+
+    st.markdown(
+        """
+        <div class="sec-head">
+            <div class="sec-head-bar"
+                 style="background:#0FE88A;"></div>
+            <div class="sec-head-title">
+                1. QUARTERLY REVENUE TRAJECTORY
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     line_data = []
+
     for item in market_data:
-        line_data.extend([
-            {"Company": item["company"], "Quarter": "Q1", "Revenue (₹ Cr)": item["q1_cr"]},
-            {"Company": item["company"], "Quarter": "Q2", "Revenue (₹ Cr)": item["q2_cr"]},
-            {"Company": item["company"], "Quarter": "Q3", "Revenue (₹ Cr)": item["q3_cr"]},
-            {"Company": item["company"], "Quarter": "Q4", "Revenue (₹ Cr)": item["q4_cr"]},
-        ])
+
+        quarters = [
+            ("Q1", item["q1_cr"]),
+            ("Q2", item["q2_cr"]),
+            ("Q3", item["q3_cr"]),
+            ("Q4", item["q4_cr"]),
+        ]
+
+        for quarter, value in quarters:
+
+            if value is not None:
+
+                line_data.append({
+                    "Company": item["company"],
+                    "Quarter": quarter,
+                    "Revenue (₹ Cr)": value,
+                })
+
     df_line = pd.DataFrame(line_data)
-    if not df_line.empty and df_line["Revenue (₹ Cr)"].sum() > 0:
-        fig_line = px.line(df_line, x="Quarter", y="Revenue (₹ Cr)", color="Company", color_discrete_map=PLOT_COLORS, markers=True)
-        st.plotly_chart(style_plotly_dark(fig_line), use_container_width=True)
 
-    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+    if not df_line.empty:
 
-    # RESTORED DONUT CHART
-    st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#FF2D55;"></div>
-      <div class="sec-head-title">2. GLOBAL REVENUE MARKET SHARE (DONUT CHART)</div></div>""", unsafe_allow_html=True)
+        fig_line = px.line(
+            df_line,
+            x="Quarter",
+            y="Revenue (₹ Cr)",
+            color="Company",
+            color_discrete_map=PLOT_COLORS,
+            markers=True,
+        )
 
-    pie_df = pd.DataFrame(market_data)
-    if pie_df["estimated_annual_cr"].sum() > 0:
-        fig_pie = px.pie(pie_df, values="estimated_annual_cr", names="company", hole=0.55, color="company", color_discrete_map=PLOT_COLORS)
-        fig_pie.update_traces(textinfo='percent+label', textposition='inside', hovertemplate="<b>%{label}</b><br>₹%{value:,.2f} Cr<br>%{percent:.1%}")
-        fig_pie.update_layout(height=400, showlegend=True, margin=dict(t=20, b=20))
-        st.plotly_chart(style_plotly_dark(fig_pie), use_container_width=True)
+        st.plotly_chart(
+            style_plotly_dark(fig_line),
+            use_container_width=True
+        )
 
-    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+    else:
 
-    # RESTORED BAR CHART
-    st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#3B82F6;"></div>
-      <div class="sec-head-title">3. TOTAL UNITS SOLD COMPARISON (BAR CHART)</div></div>""", unsafe_allow_html=True)
+        st.info(
+            "No verified quarterly revenue data was found."
+        )
 
-    if pie_df["units_annual"].sum() > 0:
-        fig_units = px.bar(pie_df, x="company", y="units_annual", color="company", color_discrete_map=PLOT_COLORS, text="units_annual")
-        fig_units.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-        fig_units.update_layout(height=400, showlegend=False, yaxis_title="Total Units Sold", xaxis_title="Company", margin=dict(t=20, b=20))
-        st.plotly_chart(style_plotly_dark(fig_units), use_container_width=True)
+    # =====================================================
+    # CHART 2 — REVENUE SHARE
+    # =====================================================
 
-
-    # =========================================================
-    # 🌍 3. REGIONAL REGISTRATION INTELLIGENCE (WORLDWIDE)
-    # =========================================================
-    st.markdown("---")
-    st.markdown("""<div class="sec-head"><div class="sec-head-bar" style="background:#EAB308;"></div>
-      <div class="sec-head-title">REGIONAL REGISTRATION INTELLIGENCE (WORLDWIDE)</div>
-      <div class="sec-head-badge">AI LOCATION FILTER</div></div>""", unsafe_allow_html=True)
-
-    col_co, col_s, col_d, col_c, col_btn = st.columns([1, 1, 1, 1, 1])
-    with col_co:
-        country_sel = st.text_input("Country", value="All", placeholder="e.g. India, USA, Germany")
-    with col_s:
-        state_sel = st.text_input("State / Province", value="All")
-    with col_d:
-        district_sel = st.text_input("District", value="All")
-    with col_c:
-        city_sel = st.text_input("City", value="All")
-    with col_btn:
-        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        fetch_regional = st.button("Fetch Regional Data", use_container_width=True)
-
-    if fetch_regional:
-        # SUPER FAST LOGIC FOR "ALL" -> global aggregate straight from already-fetched market_data
-        if country_sel == "All" and state_sel == "All" and district_sel == "All" and city_sel == "All":
-            st.markdown(f"#### 🌍 Sales Snapshot: Worldwide (Global Aggregate)")
-            st.markdown(f"""
-            <div style="background:rgba(234, 179, 8, 0.1); border-left: 3px solid #EAB308; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-                <p style="margin:0; color:#fff;">💡 <b>AI Insight:</b> Displaying consolidated worldwide unit sales data for {clean_fy}.</p>
+    st.markdown(
+        """
+        <div class="sec-head">
+            <div class="sec-head-bar"
+                 style="background:#FF2D55;"></div>
+            <div class="sec-head-title">
+                2. REVENUE DISTRIBUTION
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-            global_df = pd.DataFrame([{"Brand": item["company"], "Units Registered": item["units_annual"]} for item in market_data])
-            total_global = global_df["Units Registered"].sum()
-            global_df["Market Share"] = (global_df["Units Registered"] / total_global * 100).apply(lambda x: f"{x:.1f}%") if total_global > 0 else "N/A"
-            st.markdown(f"<p style='color: #0FE88A; font-weight: bold;'>Total Worldwide Market Size (Tracked): {total_global:,.0f} Units</p>", unsafe_allow_html=True)
-            st.dataframe(global_df, use_container_width=True, hide_index=True)
+    revenue_chart_data = [
+        item
+        for item in market_data
+        if item["revenue_annual_cr"] is not None
+        and item["revenue_annual_cr"] > 0
+    ]
 
-        else:
-            loc_display = " > ".join([p for p in [country_sel, state_sel, district_sel, city_sel] if p != "All"])
-            with st.spinner(f"Scraping regional registration data for {loc_display}..."):
-                target_yr = period.split("-")[0].replace("FY ", "").strip()
-                reg_data = get_location_sales(country=country_sel, state=state_sel, district=district_sel, city=city_sel, year=target_yr)
+    if revenue_chart_data:
 
-                st.markdown(f"#### 📍 Sales Snapshot: {reg_data['metadata']['query_location']}")
+        pie_df = pd.DataFrame(
+            revenue_chart_data
+        )
 
-                st.markdown(f"""
-                <div style="background:rgba(234, 179, 8, 0.1); border-left: 3px solid #EAB308; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-                    <p style="margin:0; color:#fff;">💡 <b>AI Insight:</b> {reg_data['summary']}</p>
-                </div>
-                """, unsafe_allow_html=True)
+        fig_pie = px.pie(
+            pie_df,
+            values="revenue_annual_cr",
+            names="company",
+            hole=0.55,
+            color="company",
+            color_discrete_map=PLOT_COLORS,
+        )
 
-                reg_df = pd.DataFrame(reg_data['sales_data'])
-                if not reg_df.empty and 'units' in reg_df.columns:
-                    total_loc_units = reg_data['total_units']
-                    st.markdown(f"<p style='color: #0FE88A; font-weight: bold;'>Total Units Sold in this Region: {total_loc_units:,.0f}</p>", unsafe_allow_html=True)
+        fig_pie.update_traces(
+            textinfo="percent+label",
+            textposition="inside",
+            hovertemplate=(
+                "<b>%{label}</b><br>"
+                "₹%{value:,.2f} Cr<br>"
+                "%{percent:.1%}"
+            ),
+        )
 
-                    reg_df.rename(columns={"brand": "Brand", "units": "Units Registered", "market_share": "Market Share"}, inplace=True)
-                    st.dataframe(reg_df, use_container_width=True, hide_index=True)
+        fig_pie.update_layout(
+            height=400,
+            showlegend=True,
+            margin=dict(
+                t=20,
+                b=20
+            ),
+        )
+
+        st.plotly_chart(
+            style_plotly_dark(fig_pie),
+            use_container_width=True
+        )
+
+    else:
+
+        st.info(
+            "No verified revenue data available for distribution chart."
+        )
+
+    # =====================================================
+    # CHART 3 — UNITS
+    # =====================================================
+
+    st.markdown(
+        """
+        <div class="sec-head">
+            <div class="sec-head-bar"
+                 style="background:#3B82F6;"></div>
+            <div class="sec-head-title">
+                3. VERIFIED TRACTOR UNITS COMPARISON
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    unit_chart_data = [
+        item
+        for item in market_data
+        if item["units_annual"] > 0
+    ]
+
+    if unit_chart_data:
+
+        units_df = pd.DataFrame(
+            unit_chart_data
+        )
+
+        fig_units = px.bar(
+            units_df,
+            x="company",
+            y="units_annual",
+            color="company",
+            color_discrete_map=PLOT_COLORS,
+            text="units_annual",
+        )
+
+        fig_units.update_traces(
+            texttemplate="%{text:,.0f}",
+            textposition="outside",
+        )
+
+        fig_units.update_layout(
+            height=400,
+            showlegend=False,
+            yaxis_title="Verified Tractor Units",
+            xaxis_title="Company",
+            margin=dict(
+                t=20,
+                b=20
+            ),
+        )
+
+        st.plotly_chart(
+            style_plotly_dark(fig_units),
+            use_container_width=True
+        )
+
+    else:
+
+        st.info(
+            "No verified tractor-unit data available."
+        )
+
+    # =====================================================
+    # SOURCE DETAILS
+    # =====================================================
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+        <div class="sec-head">
+            <div class="sec-head-bar"
+                 style="background:#64748B;"></div>
+            <div class="sec-head-title">
+                DATA SOURCES & VERIFICATION
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    for item in market_data:
+
+        with st.expander(
+            f"{item['company']} — {item['data_source_type']}"
+        ):
+
+            st.write(
+                f"**Scope:** {item['scope']}"
+            )
+
+            st.write(
+                f"**Confidence:** {item['confidence']}"
+            )
+
+            if item["source_name"]:
+                st.write(
+                    f"**Source:** {item['source_name']}"
+                )
+
+            if item["source_description"]:
+                st.write(
+                    item["source_description"]
+                )
+
+            if item["source_url"] != "#":
+
+                st.markdown(
+                    f"[Open source]({item['source_url']})"
+                )
+
+            if item["source_urls"]:
+
+                st.write("Additional Tavily sources:")
+
+                for url in item["source_urls"][:10]:
+
+                    st.markdown(
+                        f"- [{url}]({url})"
+                    )
+
+
+# =========================================================
+# OPTIONAL DEBUG FUNCTION
+# =========================================================
+
+def render_sales_debug(market_data):
+
+    st.markdown("---")
+
+    st.subheader("Sales Data Debug")
+
+    debug_rows = []
+
+    for item in market_data:
+
+        debug_rows.append({
+            "Company": item["company"],
+            "Units": item["units_annual"],
+            "Revenue": item["revenue_annual_cr"],
+            "Scope": item["scope"],
+            "Growth": item["growth_percent"],
+            "Confidence": item["confidence"],
+            "Source": item["source_url"],
+            "Status": item["data_source_type"],
+        })
+
+    st.dataframe(
+        pd.DataFrame(debug_rows),
+        use_container_width=True,
+        hide_index=True
+    )
