@@ -494,7 +494,7 @@ if fetch_btn or 'data_loaded' in st.session_state:
         
     target_deals  = mahindra_first(target_deals)
     target_news   = mahindra_first(target_news)
-    target_social = mahindra_first(target_social)
+ #   target_social = mahindra_first(target_social)
 
     ts = time.strftime("%d %b %Y · %H:%M IST")
     st.markdown(f"""
