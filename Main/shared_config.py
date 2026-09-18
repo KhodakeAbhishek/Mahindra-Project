@@ -24,10 +24,10 @@ GROQ_API_KEYS = [
     "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"
 ]
 TAVILY_API_KEYS = [
-    "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",
-    "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",
-    "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",
-    "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",
+    "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",
+    "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",
+    "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",
+    "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",
     
 ]
 
