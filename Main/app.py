@@ -14,7 +14,7 @@ from Sales.sales import fetch_all_sales, render_sales_tab
 # from modelwise.modelwise import render_modelwise_tab
 from News.news import get_market_news, render_news_tab
 from News.deals import get_b2b_deals, render_deals_tab
-#from News.socialmedia import fetch_social_media_news, render_social_tab
+from News.socialmedia import fetch_social_media_news, render_social_tab
 from Dealers.dealer import render_dealers_tab
 from Ai.aibot import render_aibot_tab
 from tender.tender import render_tenders_tab, init_tender_system
@@ -485,7 +485,7 @@ if fetch_btn or 'data_loaded' in st.session_state:
             market_data = [d for d in market_data if d['company'] == company]
         target_deals  = get_b2b_deals(company, period)
         target_news   = get_market_news(company, period)
-  #      target_social = fetch_social_media_news(company, period)
+        target_social = fetch_social_media_news(company, period)
 
     market_data = sorted(market_data, key=lambda x: 0 if x.get('company') == 'Mahindra' else 1)
 
@@ -494,7 +494,7 @@ if fetch_btn or 'data_loaded' in st.session_state:
         
     target_deals  = mahindra_first(target_deals)
     target_news   = mahindra_first(target_news)
-  #      target_social = mahindra_first(target_social)
+    target_social = mahindra_first(target_social)
 
     ts = time.strftime("%d %b %Y · %H:%M IST")
     st.markdown(f"""
@@ -512,9 +512,9 @@ if fetch_btn or 'data_loaded' in st.session_state:
 </div>
     """, unsafe_allow_html=True)
 
-    t_sales, t_deals, t_news, t_dealers, t_tenders, t_chat = st.tabs([
+    t_sales, t_deals, t_news, t_social, t_dealers, t_tenders, t_chat = st.tabs([
         "💰 SALES", "🤝 DEALS",
-        "📰 NEWS", "🏢 DEALERS", "📋 TENDERS", "🤖 AI ANALYST"
+        "📰 NEWS", "📱 SOCIAL MEDIA", "🏢 DEALERS", "📋 TENDERS", "🤖 AI ANALYST"
     ])
 
     with t_sales:
@@ -525,10 +525,10 @@ if fetch_btn or 'data_loaded' in st.session_state:
         render_deals_tab(target_deals, period)
     with t_news:
         render_news_tab(target_news, period)
-   # with t_social:
-   #     render_social_tab(target_social, period)
+    with t_social:
+        render_social_tab(target_social, period)
     with t_dealers:
-        render_dealers_tab()
+        render_dealers_tab(company)
     with t_chat:
         render_aibot_tab(market_data, period)
     with t_tenders:
@@ -547,9 +547,9 @@ else:
 <div class="hero-container">
 <div class="hero-text">
 <div class="hero-eyebrow">Sales Intelligence Platform · India</div>
-<div class="title-red">INDIA</div>
+<div class="title-red">INDIAN</div>
 <div class="title-black">TRACTOR MARKET</div>
-<div class="title-sub">Competitive Intelligence · FY Data</sdiv>
+<div class="title-sub">Competitive Intelligence · FY Data</div>
 </div>
 <div class="hero-image">
 <img src="{tractor_src}" alt="Tractor Illustration">
