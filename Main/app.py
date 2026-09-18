@@ -567,8 +567,8 @@ else:
 <div class="splash-wrap">
 <div class="hero-container">
 <div class="hero-text">
-<div class="hero-eyebrow">Sales Intelligence Platform · India</div>
-<div class="title-red">INDIA</div>
+<div class="hero-eyebrow">Sales Intelligence Platform · Global</div>
+<div class="title-red">GLOBAL</div>
 <div class="title-black">TRACTOR MARKET</div>
 <div class="title-sub">Competitive Intelligence · FY Data</sdiv>
 </div>
