@@ -485,7 +485,7 @@ if fetch_btn or 'data_loaded' in st.session_state:
             market_data = [d for d in market_data if d['company'] == company]
         target_deals  = get_b2b_deals(company, period)
         target_news   = get_market_news(company, period)
-        target_social = fetch_social_media_news(company, period)
+    #    target_social = fetch_social_media_news(company, period)
 
     market_data = sorted(market_data, key=lambda x: 0 if x.get('company') == 'Mahindra' else 1)
 
